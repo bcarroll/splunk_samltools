@@ -4,7 +4,7 @@
 The SAML Utilities add-on for Splunk adds a command named <code><strong>SAML</strong></code> to the Splunk search language which can be used to parse encoded SAML messages in Splunk searches.
 
 <h4>Installation</h4>
-SAML Utilities is a standard Splunk add-on and requires no special configuration.  A restart of Splunk is not required once installed.
+SAML Utilities is a standard Splunk add-on and requires no special configuration.  A restart of Splunk is required to complete installation.
 
 <h4>Usage</h4>
 The <code><strong>SAML</strong></code> command is implemented as a single search command which can be used to parse encoded SAML messages.
