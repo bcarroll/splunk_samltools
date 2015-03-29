@@ -22,7 +22,8 @@ The type argument specifies the type of SAML message to parse (authnrequest or r
 
 <h5>format</h5>
 
-The format argument specifies whether the SAML message XML will be tidy'd (add newlines and indents) or will be left as-is
+The format argument specifies whether the SAML message XML will be tidy'd (add newlines and indents) or will be left as-is.
+
 The default is "raw" which leaves the XML content as-is.
 
 <h5>field</h5>
