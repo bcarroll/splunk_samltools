@@ -5,6 +5,7 @@ import base64           # base64 decoding
 import xml.dom.minidom  # XML tidying
 
 def decode_response(response,pretty_xml=False):
+        # TODO
         return()
 
 def decode_authnrequest(authn_request,pretty_xml=False):
