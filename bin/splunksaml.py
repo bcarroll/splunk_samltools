@@ -5,7 +5,6 @@ import base64           # base64 decoding
 import xml.dom.minidom  # XML tidying
 
 def decode_response(response,pretty_xml=False):
-        # TODO
         return()
 
 def decode_authnrequest(authn_request,pretty_xml=False):
@@ -16,10 +15,13 @@ def decode_authnrequest(authn_request,pretty_xml=False):
         #               Return
         #                       The decoded AuthnRequest if successful, "Error decoding SAMLRequest" on failure.
         #
-        urldecoded_SAMLRequest   = urllib.unquote(authn_request)
-        #urldecoded_SAMLRequest  = urldecoded_SAMLRequest.strip('SAMLRequest=')
-        b64decoded_SAMLRequest   = base64.b64decode(urldecoded_SAMLRequest)
-        decompressed_SAMLRequest = zlib.decompress(b64decoded_SAMLRequest, -15)
+        if (authn_request):
+                urldecoded_SAMLRequest   = urllib.unquote(authn_request)
+                #urldecoded_SAMLRequest  = urldecoded_SAMLRequest.strip('SAMLRequest=')
+                b64decoded_SAMLRequest   = base64.b64decode(urldecoded_SAMLRequest)
+                decompressed_SAMLRequest = zlib.decompress(b64decoded_SAMLRequest, -15)
+        else:
+                return()
 
         if decompressed_SAMLRequest is None:
                 return "Error decoding SAMLRequest"
@@ -41,7 +43,7 @@ def dosaml(results,settings):
                         samlfunct = decode_authnrequest
                 if type == "response":
                         samlfunct = decode_response
-    
+
                 for _result in results:
                         for _field in fields:
                                 if _field in _result:
@@ -55,4 +57,5 @@ def dosaml(results,settings):
                 results = splunk.Intersplunk.generateErrorResults("Error : Traceback: " + str(stack))
     
 results, dummyresults, settings = splunk.Intersplunk.getOrganizedResults()
+
 results = dosaml(results, settings)
