@@ -47,7 +47,10 @@ def dosaml(results,settings):
                 for _result in results:
                         for _field in fields:
                                 if _field in _result:
-                                        _result[_field] = samlfunct(_result[_field])
+                                        if pretty_xml == "tidy":
+                                                _result[_field] = samlfunct(_result[_field],True)       
+                                        else:
+                                                _result[_field] = samlfunct(_result[_field])
     
                 splunk.Intersplunk.outputResults(results)
     
