@@ -76,13 +76,13 @@ def dosaml(results,settings):
                         for _field in fields:
                                 if _field in _result:
                                         if pretty_xml == "tidy":
-                                                _result[_field] = samlfunct(_result[_field],True)       
+                                                _result[_field] = samlfunct(_result[_field],True) # update specified field with decoded data    
                                                 if (extract_fields):
-                                                        _result.update(do_extract_fields(_result[_field], saml_type))
+                                                        _result.update(do_extract_fields(_result[_field], saml_type)) # create new fields with SAML attributes
                                         else:
-                                                _result[_field] = samlfunct(_result[_field])
+                                                _result[_field] = samlfunct(_result[_field]) # update specified field with decoded data
                                                 if (extract_fields):
-                                                        _result.update(do_extract_fields(_result[_field], saml_type))
+                                                        _result.update(do_extract_fields(_result[_field], saml_type)) # create new fields with SAML attributes
 
                 #append extracted_saml_fields to results
                 splunk.Intersplunk.outputResults(results)
@@ -123,26 +123,44 @@ def saml_authnrequest_extractFields(authnrequest):
         saml_request['SAMLRequest_Issuer_Namespace']         = ""
         saml_request['SAMLRequest_Issuer']                   = ""
         saml_request['SAMLRequest_NameIDPolicy_AllowCreate'] = ""
-        saml_request['SAMLRequest_Protocol']                 = saml_document.getAttribute("xmlns:samlp").encode()
-        saml_request['SAMLRequest_ACSURL']                   = saml_document.getAttribute("AssertionConsumerServiceURL").encode()
-        saml_request['SAMLRequest_Destination']              = saml_document.getAttribute("Destination").encode()
-        saml_request['SAMLRequest_Consent']                  = saml_document.getAttribute("Consent").encode()
-        saml_request['SAMLRequest_ID']                       = saml_document.getAttribute("ID").encode().encode()
-        saml_request['SAMLRequest_Issue_Instant']            = saml_document.getAttribute("IssueInstant").encode()
-        saml_request['SAMLRequest_Protocol_Binding']         = saml_document.getAttribute("ProtocolBinding").encode()
-        saml_request['SAMLRequest_Version']                  = saml_document.getAttribute("Version").encode()
+
+        if (saml_document.getAttribute("xmlns:samlp")):
+                saml_request['SAMLRequest_Protocol']                 = saml_document.getAttribute("xmlns:samlp").encode()
+
+        if (saml_document.getAttribute("AssertionConsumerServiceURL")):
+                saml_request['SAMLRequest_ACSURL']                   = saml_document.getAttribute("AssertionConsumerServiceURL").encode()
+
+        if (saml_document.getAttribute("Destination")):
+                saml_request['SAMLRequest_Destination']              = saml_document.getAttribute("Destination").encode()
+
+        if (saml_document.getAttribute("Consent")):
+                saml_request['SAMLRequest_Consent']                  = saml_document.getAttribute("Consent").encode()
+
+        if (saml_document.getAttribute("ID")):
+                saml_request['SAMLRequest_ID']                       = saml_document.getAttribute("ID").encode()
+
+        if (saml_document.getAttribute("IssueInstant")):
+                saml_request['SAMLRequest_Issue_Instant']            = saml_document.getAttribute("IssueInstant").encode()
+
+        if (saml_document.getAttribute("ProtocolBinding")):
+                saml_request['SAMLRequest_Protocol_Binding']         = saml_document.getAttribute("ProtocolBinding").encode()
+
+        if (saml_document.getAttribute("Version")):
+                saml_request['SAMLRequest_Version']                  = saml_document.getAttribute("Version").encode()
+
         if (saml_document.getElementsByTagName("saml:Issuer")):
-                saml_request['SAMLRequest_Issuer_Namespace'] = saml_document.getElementsByTagName("saml:Issuer")[0].getAttribute("xmlns:saml").encode()
-                saml_request['SAMLRequest_Issuer']           = saml_document.getElementsByTagName("saml:Issuer")[0].childNodes[0].data.encode()
+                saml_request['SAMLRequest_Issuer_Namespace']         = saml_document.getElementsByTagName("saml:Issuer")[0].getAttribute("xmlns:saml").encode()
+                saml_request['SAMLRequest_Issuer']                   = saml_document.getElementsByTagName("saml:Issuer")[0].childNodes[0].data.encode()
+
         if (saml_document.getElementsByTagName("Issuer")):
-                saml_request['SAMLRequest_Issuer_Namespace'] = saml_document.getElementsByTagName("Issuer")[0].getAttribute("xmlns").encode()
-                saml_request['SAMLRequest_Issuer']           = saml_document.getElementsByTagName("Issuer")[0].childNodes[0].data.encode()
-        saml_request['SAMLRequest_NameIDPolicy_AllowCreate'] = saml_document.getElementsByTagName("samlp:NameIDPolicy")[0].getAttribute("AllowCreate").encode()
+                saml_request['SAMLRequest_Issuer_Namespace']         = saml_document.getElementsByTagName("Issuer")[0].getAttribute("xmlns").encode()
+                saml_request['SAMLRequest_Issuer']                   = saml_document.getElementsByTagName("Issuer")[0].childNodes[0].data.encode()
+
+        if (saml_document.getElementsByTagName("samlp:NameIDPolicy")):
+                saml_request['SAMLRequest_NameIDPolicy_AllowCreate'] = saml_document.getElementsByTagName("samlp:NameIDPolicy")[0].getAttribute("AllowCreate").encode()
+
         logger.debug(saml_request)
         return(saml_request)
-
-
-
 
 logger = setup_logger()    
 results, dummyresults, settings = splunk.Intersplunk.getOrganizedResults()
