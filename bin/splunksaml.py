@@ -4,8 +4,6 @@ import zlib             # uncompressing
 import base64           # base64 decoding
 import xml.dom.minidom  # XML tidying
 import logging, logging.handlers
-#import os,platform,json,pprint, StringIO, csv
-import unicodedata
 
 LOGFILE = '/opt/splunk/var/log/splunk/saml_utilities.log'
 LOGLEVEL = 'DEBUG'
@@ -20,6 +18,7 @@ def setup_logger():
         return(logger)
 
 def set_loglevel(logger,LOGLEVEL):
+        logger.debug('set_level()')
         if LOGLEVEL == 'DEBUG':
                 logger.setLevel(logging.DEBUG)
         if LOGLEVEL == 'INFO':
@@ -41,16 +40,17 @@ def decode_authnrequest(authn_request,pretty_xml=False):
         #               Return
         #                       The decoded AuthnRequest if successful, "Error decoding SAMLRequest" on failure.
         #
-        if (authn_request):
+        decompressed_SAMLRequest = ""
+        try:
                 urldecoded_SAMLRequest   = urllib.unquote(authn_request)
                 #urldecoded_SAMLRequest  = urldecoded_SAMLRequest.strip('SAMLRequest=')
                 b64decoded_SAMLRequest   = base64.b64decode(urldecoded_SAMLRequest)
                 decompressed_SAMLRequest = zlib.decompress(b64decoded_SAMLRequest, -15)
-        else:
-                return()
+        except:
+                if decompressed_SAMLRequest is None:
+                        logger.error("Error decoding SAMLRequest")
+                        return()
 
-        if decompressed_SAMLRequest is None:
-                return "Error decoding SAMLRequest"
         else:
                 if pretty_xml:
                         _xml_doc = xml.dom.minidom.parseString(decompressed_SAMLRequest)
@@ -60,7 +60,6 @@ def decode_authnrequest(authn_request,pretty_xml=False):
                         return decompressed_SAMLRequest
                         
 def dosaml(results,settings):
-        #logger.debug( "dosaml(%s,%s)" % (results,settings) )
         try:
                 fields, argvals = splunk.Intersplunk.getKeywordsAndOptions()
                 saml_type       = argvals.get("type", "authnrequest")
@@ -91,10 +90,9 @@ def dosaml(results,settings):
                 import traceback
                 stack   = traceback.format_exc()
                 results = splunk.Intersplunk.generateErrorResults("Error : Traceback: " + str(stack))
-                logger.error(results)
+                logger.error("Error : " + str(stack))
 
 def do_extract_fields(SAMLMessage,saml_type):
-        logger.debug('do_extract_fields()')
         extracted_fields = ""
         if saml_type == "authnrequest":
                 return( saml_authnrequest_extractFields(SAMLMessage) )
@@ -107,60 +105,85 @@ def saml_response_extractFields(assertion):
         return(False)
 
 def saml_authnrequest_extractFields(authnrequest):
-        logger.debug('saml_authnrequest()')
         import xml.dom.minidom
-        DOMTree = xml.dom.minidom.parseString(authnrequest)
-        saml_document = DOMTree.documentElement
-        saml_request = {}
-        saml_request['SAMLRequest_Protocol']                 = ""
-        saml_request['SAMLRequest_ACSURL']                   = ""
-        saml_request['SAMLRequest_Destination']              = ""
-        saml_request['SAMLRequest_Consent']                  = ""
-        saml_request['SAMLRequest_ID']                       = ""
-        saml_request['SAMLRequest_Issue_Instant']            = ""
-        saml_request['SAMLRequest_Protocol_Binding']         = ""
-        saml_request['SAMLRequest_Version']                  = ""
-        saml_request['SAMLRequest_Issuer_Namespace']         = ""
-        saml_request['SAMLRequest_Issuer']                   = ""
-        saml_request['SAMLRequest_NameIDPolicy_AllowCreate'] = ""
+        try:
+                DOMTree = xml.dom.minidom.parseString(authnrequest)
+                saml_document = DOMTree.documentElement
+                saml_request = {}
+                saml_request['SAMLRequest_Namespace']                = ""
+                saml_request['SAMLRequest_ACSURL']                   = ""
+                saml_request['SAMLRequest_Destination']              = ""
+                saml_request['SAMLRequest_Consent']                  = ""
+                saml_request['SAMLRequest_ID']                       = ""
+                saml_request['SAMLRequest_Issue_Instant']            = ""
+                saml_request['SAMLRequest_Protocol_Binding']         = ""
+                saml_request['SAMLRequest_Version']                  = ""
+                saml_request['SAMLRequest_Issuer_Namespace']         = ""
+                saml_request['SAMLRequest_Issuer']                   = ""
+                saml_request['SAMLRequest_IsPassive']                = ""
+                saml_request['SAMLRequest_ProviderName']             = ""
+                saml_request['SAMLRequest_NameIDPolicy_AllowCreate'] = ""
 
-        if (saml_document.getAttribute("xmlns:samlp")):
-                saml_request['SAMLRequest_Protocol']                 = saml_document.getAttribute("xmlns:samlp").encode()
+                if (saml_document.getAttribute("xmlns:samlp")):
+                        saml_request['SAMLRequest_Namespace']                = saml_document.getAttribute("xmlns:samlp").encode()
 
-        if (saml_document.getAttribute("AssertionConsumerServiceURL")):
-                saml_request['SAMLRequest_ACSURL']                   = saml_document.getAttribute("AssertionConsumerServiceURL").encode()
+                if (saml_document.getAttribute("xmlns:saml")):
+                        saml_request['SAMLRequest_Namespace']                = saml_document.getAttribute("xmlns:saml").encode()
 
-        if (saml_document.getAttribute("Destination")):
-                saml_request['SAMLRequest_Destination']              = saml_document.getAttribute("Destination").encode()
+                if (saml_document.getAttribute("xmlns:ds")):
+                        saml_request['SAMLRequest_Namespace']                = saml_document.getAttribute("xmlns:ds").encode()
 
-        if (saml_document.getAttribute("Consent")):
-                saml_request['SAMLRequest_Consent']                  = saml_document.getAttribute("Consent").encode()
+                if (saml_document.getAttribute("xmlns:xenc")):
+                        saml_request['SAMLRequest_Namespace']                = saml_document.getAttribute("xmlns:xenc").encode()
 
-        if (saml_document.getAttribute("ID")):
-                saml_request['SAMLRequest_ID']                       = saml_document.getAttribute("ID").encode()
+                if (saml_document.getAttribute("xmlns:xs")):
+                        saml_request['SAMLRequest_Namespace']                = saml_document.getAttribute("xmlns:xs").encode()
 
-        if (saml_document.getAttribute("IssueInstant")):
-                saml_request['SAMLRequest_Issue_Instant']            = saml_document.getAttribute("IssueInstant").encode()
+                if (saml_document.getAttribute("xmlns:xsi")):
+                        saml_request['SAMLRequest_Namespace']                = saml_document.getAttribute("xmlns:xsi").encode()
 
-        if (saml_document.getAttribute("ProtocolBinding")):
-                saml_request['SAMLRequest_Protocol_Binding']         = saml_document.getAttribute("ProtocolBinding").encode()
+                if (saml_document.getAttribute("AssertionConsumerServiceURL")):
+                        saml_request['SAMLRequest_ACSURL']                   = saml_document.getAttribute("AssertionConsumerServiceURL").encode()
 
-        if (saml_document.getAttribute("Version")):
-                saml_request['SAMLRequest_Version']                  = saml_document.getAttribute("Version").encode()
+                if (saml_document.getAttribute("Destination")):
+                        saml_request['SAMLRequest_Destination']              = saml_document.getAttribute("Destination").encode()
 
-        if (saml_document.getElementsByTagName("saml:Issuer")):
-                saml_request['SAMLRequest_Issuer_Namespace']         = saml_document.getElementsByTagName("saml:Issuer")[0].getAttribute("xmlns:saml").encode()
-                saml_request['SAMLRequest_Issuer']                   = saml_document.getElementsByTagName("saml:Issuer")[0].childNodes[0].data.encode()
+                if (saml_document.getAttribute("Consent")):
+                        saml_request['SAMLRequest_Consent']                  = saml_document.getAttribute("Consent").encode()
 
-        if (saml_document.getElementsByTagName("Issuer")):
-                saml_request['SAMLRequest_Issuer_Namespace']         = saml_document.getElementsByTagName("Issuer")[0].getAttribute("xmlns").encode()
-                saml_request['SAMLRequest_Issuer']                   = saml_document.getElementsByTagName("Issuer")[0].childNodes[0].data.encode()
+                if (saml_document.getAttribute("ID")):
+                        saml_request['SAMLRequest_ID']                       = saml_document.getAttribute("ID").encode()
 
-        if (saml_document.getElementsByTagName("samlp:NameIDPolicy")):
-                saml_request['SAMLRequest_NameIDPolicy_AllowCreate'] = saml_document.getElementsByTagName("samlp:NameIDPolicy")[0].getAttribute("AllowCreate").encode()
+                if (saml_document.getAttribute("IssueInstant")):
+                                saml_request['SAMLRequest_Issue_Instant']    = saml_document.getAttribute("IssueInstant").encode()
 
-        logger.debug(saml_request)
-        return(saml_request)
+                if (saml_document.getAttribute("ProtocolBinding")):
+                        saml_request['SAMLRequest_Protocol_Binding']         = saml_document.getAttribute("ProtocolBinding").encode()
+
+                if (saml_document.getAttribute("Version")):
+                        saml_request['SAMLRequest_Version']                  = saml_document.getAttribute("Version").encode()
+
+                if (saml_document.getAttribute("ProviderName")):
+                        saml_request['SAMLRequest_ProviderName']             = saml_document.getAttribute("ProviderName").encode()
+
+                if (saml_document.getElementsByTagName("saml:Issuer")):
+                        saml_request['SAMLRequest_Issuer_Namespace']         = saml_document.getElementsByTagName("saml:Issuer")[0].getAttribute("xmlns:saml").encode()
+                        saml_request['SAMLRequest_Issuer']                   = saml_document.getElementsByTagName("saml:Issuer")[0].childNodes[0].data.encode()
+
+                if (saml_document.getElementsByTagName("Issuer")):
+                        saml_request['SAMLRequest_Issuer_Namespace']         = saml_document.getElementsByTagName("Issuer")[0].getAttribute("xmlns").encode()
+                        saml_request['SAMLRequest_Issuer']                   = saml_document.getElementsByTagName("Issuer")[0].childNodes[0].data.encode()
+
+                if (saml_document.getAttribute("IsPassive")):
+                        saml_request['SAMLRequest_IsPassive']                = saml_document.getAttribute("IsPassive").encode()
+
+                if (saml_document.getElementsByTagName("samlp:NameIDPolicy")):
+                        saml_request['SAMLRequest_NameIDPolicy_AllowCreate'] = saml_document.getElementsByTagName("samlp:NameIDPolicy")[0].getAttribute("AllowCreate").encode()
+                        saml_request['SAMLRequest_NameIDPolicy_Format']      = saml_document.getElementsByTagName("samlp:NameIDPolicy")[0].getAttribute("Format").encode()
+
+                return(saml_request)
+        except:
+                return({})
 
 logger = setup_logger()    
 results, dummyresults, settings = splunk.Intersplunk.getOrganizedResults()
