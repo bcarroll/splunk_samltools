@@ -1,190 +1,149 @@
-import re,sys,time,splunk.Intersplunk
-import urllib           # urldecoding
-import zlib             # uncompressing
-import base64           # base64 decoding
-import xml.dom.minidom  # XML tidying
+import re, sys, time, splunk.Intersplunk
+import urllib, zlib, base64
 import logging, logging.handlers
+try:
+    import xml.etree.cElementTree as xml
+except ImportError:
+    import xml.etree.ElementTree as xml
 
-LOGFILE = '/opt/splunk/var/log/splunk/saml_utilities.log'
-LOGLEVEL = 'DEBUG'
+def setup_logger(LOGGER_NAME,LOGFILE_NAME):
+    logger       = logging.getLogger(LOGGER_NAME)
+    file_handler = logging.handlers.RotatingFileHandler(LOGFILE_NAME)
+    formatter    = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+    logger.setLevel(logging.ERROR)
+    return(logger)
 
-def setup_logger():
-        logger = logging.getLogger('SAML_Utilities')
+def set_logger_level(LOGGER_LEVEL='NOTSET'):
+    logger.info('set_logger_level(' + LOGGER_LEVEL + ') called...')
+    if LOGGER_LEVEL   == 'NOTSET':
+        logger.setLevel(logging.NOTSET)
+    elif LOGGER_LEVEL == 'DEBUG':
         logger.setLevel(logging.DEBUG)
-        file_handler = logging.handlers.RotatingFileHandler(LOGFILE)
-        formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
-        file_handler.setFormatter(formatter)
-        logger.addHandler(file_handler)
-        return(logger)
+    elif LOGGER_LEVEL == 'INFO':
+        logger.setLevel(logging.INFO)
+    elif LOGGER_LEVEL == 'WARNING':
+        logger.setLevel(logging.WARNING)
+    elif LOGGER_LEVEL == 'ERROR':
+        logger.setLevel(logging.ERROR)
+    elif LOGGER_LEVEL == 'CRITICAL':
+        logger.setLevel(logging.CRITICAL)
+    return(None)
 
-def set_loglevel(logger,LOGLEVEL):
-        logger.debug('set_level()')
-        if LOGLEVEL == 'DEBUG':
-                logger.setLevel(logging.DEBUG)
-        if LOGLEVEL == 'INFO':
-                logger.setLevel(logging.INFO)
-        if LOGLEVEL == 'WARN':
-                logger.setLevel(logging.WARN)
-        if LOGLEVEL == 'ERROR':
-                logger.setLevel(logging.ERROR)
-        return()
+def uri_unescape(string):
+    #   Parameters
+    #       string : URI escaped string
+    #   Return
+    #       URI unescaped string
+    logger.debug('uri_unescape() called...')
+    uri_unescaped_string = None
+    try:
+        uri_unescaped_string = urllib.unquote(string) # urldecode Base64 encoded SAML AuthnRequest
+    except:
+        return(string)
+    return(uri_unescaped_string)
 
-def decode_response(response,pretty_xml=False):
-        return()
+def base64_decode(string):
+    #   Parameters
+    #       string : Base64 encoded string
+    #   Return
+    #       decoded/plain text string
+    logger.debug('base64_decode() called...')
+    base64_decoded_string = None
+    try:
+        base64_decoded_string = base64.b64decode(string) # decode Base64 encoded XML document
+    except:
+        return(string)
+    return(base64_decoded_string)
 
-def decode_authnrequest(authn_request,pretty_xml=False):
-        #       AuthnRequest is always deflated, base64 encoded and url-escaped.
-        #               Parameters
-        #                       authn_request : deflated, base64 encoded and url-escaped SAML AuthnRequest XML document/string
-        #                       pretty_xml    : Return pretty/tidy SAMLRequest XML (Multi-line, indented) (Default is False)
-        #               Return
-        #                       The decoded AuthnRequest if successful, "Error decoding SAMLRequest" on failure.
-        #
-        decompressed_SAMLRequest = ""
+def zlib_decompress(string):
+    #   Parameters
+    #       string : zlib compressed string
+    #   Return
+    #       inflated/uncompressed string
+    zlib_decompressed_string = None
+    try:
+        zlib_decompressed_string = zlib.decompress(string, -15) # uncompress XML document
+    except:
+        return(string)
+    return(zlib_decompressed_string)
+
+def xml2dict(xmlstring, prepend_string=None, remove_namespace=True):
+    logger.debug('xml2dict() called...')
+    #   Parameters
+    #       xmlstring        : XML document
+    #       prepend_string   : String to add to the beginning of each key
+    #       remove_namespace : If set to True (default), the XML namespace is removed from key names
+    #   Return
+    #       xmlkv            : dict of XML element names and values.  XML tags and attribute names are concatenated to form the returned key
+
+    # TODO: dict keys should indicate the complete XML hierarchy.
+    #   Example: <Root><Element1><Element2 Attribute="stuff" /></Element1></Root> = xmlkv['Root_Element1_Element2_Attribute']
+
+    xmlkv    = {}
+    try:
+        root     = xml.fromstring(xmlstring)
+        tree     = xml.ElementTree(root)
+    except:
+        logger.warning('Error parsing XML:' + xmlstring)
+        return(None)
+
+    root_tag = repr(root).split('}',1)[1].split('\'',1)[0].replace('\n','').replace('\r','') # strip XML namespace and remove newline characters
+    if prepend_string is not None:
+        root_tag = prepend_string + root_tag
+    for element in tree.iter():
+        if remove_namespace == True:
+            if '}' in element.tag:
+                element.tag = element.tag.split('}',1)[1].replace('\n','').replace('\r','') # strip XML namespaces and remove newline characters
         try:
-                urldecoded_SAMLRequest   = urllib.unquote(authn_request)
-                #urldecoded_SAMLRequest  = urldecoded_SAMLRequest.strip('SAMLRequest=')
-                b64decoded_SAMLRequest   = base64.b64decode(urldecoded_SAMLRequest)
-                decompressed_SAMLRequest = zlib.decompress(b64decoded_SAMLRequest, -15)
+            if element.text:
+                key = root_tag + '_' + element.tag
+                val = element.text = element.text.replace('\n','').replace('\r','') # remove newline characters
+                if val.strip():
+                    xmlkv[key] = val
+            elif element.attrib is not None:
+                for attribute in element.attrib:
+                    if attribute is not None:
+                        key = root_tag + '_' + element.tag + '_' + attribute.replace('\n','').replace('\r','') # remove newline characters
+                        key = key.replace('__','_') # replace 2 consecutive underscores with a single underscore (this only happens with the tag or attribute name begins with an underscore)
+                        val = element.attrib.get(attribute).replace('\n','').replace('\r','') # remove newline characters
+                        if val.strip():
+                            xmlkv[key] = val
         except:
-                if decompressed_SAMLRequest is None:
-                        logger.error("Error decoding SAMLRequest")
-                        return()
+            logger.warning(root_tag + '_' + element.tag, element.text)
+            continue
+    return(xmlkv)
 
-        else:
-                if pretty_xml:
-                        _xml_doc = xml.dom.minidom.parseString(decompressed_SAMLRequest)
-                        xml_pretty = _xml_doc.toprettyxml(indent='\t')
-                        return(xml_pretty)
-                else:
-                        return decompressed_SAMLRequest
-                        
 def dosaml(results,settings):
-        try:
-                fields, argvals = splunk.Intersplunk.getKeywordsAndOptions()
-                saml_type       = argvals.get("type", "authnrequest")
-                pretty_xml      = argvals.get("format", "raw")
-                extract_fields  = argvals.get("extract", True)
-    
-                if saml_type == "authnrequest":
-                        samlfunct = decode_authnrequest
-                if saml_type == "response":
-                        samlfunct = decode_response
+    #   Parameters
+    #       string : SAML message
+    #       type   : type of SAML message (AuthnRequest, Response, AttributeQuery, etc...)  If type is not provided we will try to detect it
+    #   Return
+    #       dict containing SAML message key/value pairs
+    try:
+        fields, argvals = splunk.Intersplunk.getKeywordsAndOptions()
 
-                for _result in results:
-                        for _field in fields:
-                                if _field in _result:
-                                        if pretty_xml == "tidy":
-                                                _result[_field] = samlfunct(_result[_field],True) # update specified field with decoded data    
-                                                if (extract_fields):
-                                                        _result.update(do_extract_fields(_result[_field], saml_type)) # create new fields with SAML attributes
-                                        else:
-                                                _result[_field] = samlfunct(_result[_field]) # update specified field with decoded data
-                                                if (extract_fields):
-                                                        _result.update(do_extract_fields(_result[_field], saml_type)) # create new fields with SAML attributes
+        for _result in results:
+            for _field in fields:
+                if _field in _result:
+                    saml_message      = _result[_field]
+                    saml_message      = uri_unescape(saml_message)
+                    saml_message      = base64_decode(saml_message)
+                    saml_message      = zlib_decompress(saml_message)
+                    saml_message_dict = xml2dict(saml_message,'SAML')
+                    if saml_message_dict is not None:
+                        logger.debug(repr(saml_message_dict))
+                        _result.update(saml_message_dict) # create new fields with SAML attributes
+        #append extracted_saml_fields to results
+        splunk.Intersplunk.outputResults(results)
+    except:
+        import traceback
+        stack   = traceback.format_exc()
+        results = splunk.Intersplunk.generateErrorResults("Error : Traceback: " + str(stack))
+        logger.error("Error : " + str(stack))
 
-                #append extracted_saml_fields to results
-                splunk.Intersplunk.outputResults(results)
-    
-        except:
-                import traceback
-                stack   = traceback.format_exc()
-                results = splunk.Intersplunk.generateErrorResults("Error : Traceback: " + str(stack))
-                logger.error("Error : " + str(stack))
-
-def do_extract_fields(SAMLMessage,saml_type):
-        extracted_fields = ""
-        if saml_type == "authnrequest":
-                return( saml_authnrequest_extractFields(SAMLMessage) )
-        if saml_type == "response":
-                return( saml_response_extractFields(SAMLMessage) )
-        return(False)
-
-def saml_response_extractFields(assertion):
-        # TODO
-        return(False)
-
-def saml_authnrequest_extractFields(authnrequest):
-        import xml.dom.minidom
-        try:
-                DOMTree = xml.dom.minidom.parseString(authnrequest)
-                saml_document = DOMTree.documentElement
-                saml_request = {}
-                saml_request['SAMLRequest_Namespace']                = ""
-                saml_request['SAMLRequest_ACSURL']                   = ""
-                saml_request['SAMLRequest_Destination']              = ""
-                saml_request['SAMLRequest_Consent']                  = ""
-                saml_request['SAMLRequest_ID']                       = ""
-                saml_request['SAMLRequest_Issue_Instant']            = ""
-                saml_request['SAMLRequest_Protocol_Binding']         = ""
-                saml_request['SAMLRequest_Version']                  = ""
-                saml_request['SAMLRequest_Issuer_Namespace']         = ""
-                saml_request['SAMLRequest_Issuer']                   = ""
-                saml_request['SAMLRequest_IsPassive']                = ""
-                saml_request['SAMLRequest_ProviderName']             = ""
-                saml_request['SAMLRequest_NameIDPolicy_AllowCreate'] = ""
-
-                if (saml_document.getAttribute("xmlns:samlp")):
-                        saml_request['SAMLRequest_Namespace']                = saml_document.getAttribute("xmlns:samlp").encode()
-
-                if (saml_document.getAttribute("xmlns:saml")):
-                        saml_request['SAMLRequest_Namespace']                = saml_document.getAttribute("xmlns:saml").encode()
-
-                if (saml_document.getAttribute("xmlns:ds")):
-                        saml_request['SAMLRequest_Namespace']                = saml_document.getAttribute("xmlns:ds").encode()
-
-                if (saml_document.getAttribute("xmlns:xenc")):
-                        saml_request['SAMLRequest_Namespace']                = saml_document.getAttribute("xmlns:xenc").encode()
-
-                if (saml_document.getAttribute("xmlns:xs")):
-                        saml_request['SAMLRequest_Namespace']                = saml_document.getAttribute("xmlns:xs").encode()
-
-                if (saml_document.getAttribute("xmlns:xsi")):
-                        saml_request['SAMLRequest_Namespace']                = saml_document.getAttribute("xmlns:xsi").encode()
-
-                if (saml_document.getAttribute("AssertionConsumerServiceURL")):
-                        saml_request['SAMLRequest_ACSURL']                   = saml_document.getAttribute("AssertionConsumerServiceURL").encode()
-
-                if (saml_document.getAttribute("Destination")):
-                        saml_request['SAMLRequest_Destination']              = saml_document.getAttribute("Destination").encode()
-
-                if (saml_document.getAttribute("Consent")):
-                        saml_request['SAMLRequest_Consent']                  = saml_document.getAttribute("Consent").encode()
-
-                if (saml_document.getAttribute("ID")):
-                        saml_request['SAMLRequest_ID']                       = saml_document.getAttribute("ID").encode()
-
-                if (saml_document.getAttribute("IssueInstant")):
-                                saml_request['SAMLRequest_Issue_Instant']    = saml_document.getAttribute("IssueInstant").encode()
-
-                if (saml_document.getAttribute("ProtocolBinding")):
-                        saml_request['SAMLRequest_Protocol_Binding']         = saml_document.getAttribute("ProtocolBinding").encode()
-
-                if (saml_document.getAttribute("Version")):
-                        saml_request['SAMLRequest_Version']                  = saml_document.getAttribute("Version").encode()
-
-                if (saml_document.getAttribute("ProviderName")):
-                        saml_request['SAMLRequest_ProviderName']             = saml_document.getAttribute("ProviderName").encode()
-
-                if (saml_document.getElementsByTagName("saml:Issuer")):
-                        saml_request['SAMLRequest_Issuer_Namespace']         = saml_document.getElementsByTagName("saml:Issuer")[0].getAttribute("xmlns:saml").encode()
-                        saml_request['SAMLRequest_Issuer']                   = saml_document.getElementsByTagName("saml:Issuer")[0].childNodes[0].data.encode()
-
-                if (saml_document.getElementsByTagName("Issuer")):
-                        saml_request['SAMLRequest_Issuer_Namespace']         = saml_document.getElementsByTagName("Issuer")[0].getAttribute("xmlns").encode()
-                        saml_request['SAMLRequest_Issuer']                   = saml_document.getElementsByTagName("Issuer")[0].childNodes[0].data.encode()
-
-                if (saml_document.getAttribute("IsPassive")):
-                        saml_request['SAMLRequest_IsPassive']                = saml_document.getAttribute("IsPassive").encode()
-
-                if (saml_document.getElementsByTagName("samlp:NameIDPolicy")):
-                        saml_request['SAMLRequest_NameIDPolicy_AllowCreate'] = saml_document.getElementsByTagName("samlp:NameIDPolicy")[0].getAttribute("AllowCreate").encode()
-                        saml_request['SAMLRequest_NameIDPolicy_Format']      = saml_document.getElementsByTagName("samlp:NameIDPolicy")[0].getAttribute("Format").encode()
-
-                return(saml_request)
-        except:
-                return({})
-
-logger = setup_logger()    
+logger = setup_logger('SplunkSAML','/opt/splunk/var/log/splunk/saml_utils.log')
+#set_logger_level('DEBUG')
 results, dummyresults, settings = splunk.Intersplunk.getOrganizedResults()
 results = dosaml(results, settings)
